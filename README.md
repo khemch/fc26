@@ -1,18 +1,35 @@
-# FC26 tournament tracker
+# FC26 tournament tracker (Cloudflare)
 
-Single-file app (`index.html`, vanilla JS) for a two-player FC26 league: matchdays, results, transfers, team pages and stats.
-It was built as a claude.ai Artifact and uses its shared database (`claude.use('db')`), so it only works inside that runtime.
+Two-player FC26 league: matchdays, results, transfers, team pages, stats.
+Static page (`public/index.html`) + a small Worker API (`src/worker.js`) + a D1 database. One shared passcode protects it.
 
-## Rules encoded
-- 10 active teams per player, squad star budget 40
-- 6 slots per matchday, optional joker replacing a starter (max 1 per player per matchday, warning only)
-- Max 2 transfers per player per window; a team needs 2 games before it can be sold
-- A team that has played 5 games must be sold and cannot play again
-- A team that missed the last 2 matchdays must play in the next
-- Matchday winner: most game wins, then goal difference
+## Deploy (about 5 minutes)
+Needs a free Cloudflare account and Node 20+.
 
-## Data
-`seed.json` maps document paths to contents (`config/main`, `teams/<slug>`, `matches/mdNN-sK`, `transfers/...`) as loaded from the original spreadsheet.
+```bash
+git clone https://github.com/khemch/fc26 && cd fc26
+npm install
+npx wrangler login
+npx wrangler d1 create fc26          # copy the database_id it prints into wrangler.toml
+npx wrangler d1 execute fc26 --remote --file=schema.sql
+npx wrangler d1 execute fc26 --remote --file=seed.sql    # current league data (42 games, 17 transfers, 36 teams)
+npx wrangler secret put PASSCODE     # choose the passcode you and Tigran will share
+npx wrangler deploy                  # prints https://fc26.<your-subdomain>.workers.dev
+```
 
-## Credits
-Club crests come from open logo collections (luukhopman/football-logos, FCLOGO). Crests belong to their clubs.
+Open the URL on both phones, enter the passcode once (it is remembered per device).
+
+## Local test
+```bash
+echo "PASSCODE=test123" > .dev.vars
+npx wrangler d1 execute fc26 --local --file=schema.sql
+npx wrangler d1 execute fc26 --local --file=seed.sql
+npx wrangler dev
+```
+
+## Notes
+- Data model: `docs(path, data)` rows with paths `config/main`, `teams/<slug>`, `matches/mdNN-sK`, `transfers/wNN-player-seq`; `meta.rev` bumps on every write and clients poll it every 3 s for live updates.
+- Backup: `npx wrangler d1 export fc26 --remote --output=backup.sql`
+- The passcode is shared and anyone with it can edit. Rotate it with `wrangler secret put PASSCODE`.
+- `artifact/index.html` is the original claude.ai Artifact version.
+- Crests come from open logo collections (luukhopman/football-logos, FCLOGO); they belong to their clubs.
